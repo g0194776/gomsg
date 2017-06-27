@@ -51,12 +51,14 @@ func (mp *MemoryProvider) Initialize(memPoolSize, memSegmentSize uint) {
 			rawDataOffset: uint(index) * mss,
 			usedOffset:    0,
 			SegmentLength: mss,
-			CurrentStatus: MEM_SEGMENT_STATUS_POOLING})
+			CurrentStatus: MEM_SEGMENT_STATUS_POOLING,
+			bytesLeft:     mss})
 	}
 }
 
 func (mp *MemoryProvider) NewSegmentProxy() MemorySegmentProxyer {
-	return &MemorySegmentProxy{mp: mp}
+	return &MemorySegmentProxy{mp: mp,
+		usedSegments: []*memorySegment{}}
 }
 
 //GetOneAvailable method returns an in-used memory segment.
