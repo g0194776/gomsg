@@ -1,7 +1,6 @@
 package memory
 
 import (
-	"bytes"
 	"errors"
 	"sync"
 
@@ -45,9 +44,10 @@ func (mp *MemoryProvider) Initialize(memPoolSize, memSegmentSize uint) {
 	//mp.usedSegments = make([]*memorySegment, 0, multiples)
 	mp.unusedSegments = make([]*memorySegment, 0, multiples)
 	for index := 0; index < int(multiples); index++ {
+		//segment raw data.
+		data := mp.memPool[index*int(mss) : (index*int(mss))+int(mss)]
 		mp.unusedSegments = append(mp.unusedSegments, &memorySegment{
-			data:          mp.memPool[index*int(mss) : (index*int(mss))+int(mss)],
-			dataBuff:      bytes.NewBuffer(mp.memPool[index*int(mss) : (index*int(mss))+int(mss)]),
+			data:          data,
 			rawDataOffset: uint(index) * mss,
 			usedOffset:    0,
 			SegmentLength: mss,

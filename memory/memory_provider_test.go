@@ -101,13 +101,3 @@ func TestInitializeMemoryPool_WithCustomizedParameters_GivebackNilPointer(t *tes
 
 	assert.IsNotNil(t, mp.Giveback(nil))
 }
-
-func Test_Raw_WriteInt32_Succeed(t *testing.T) {
-	mp := &MemoryProvider{}
-	mp.Initialize(24, 8)
-	assert.IsTrue(t, cap(mp.memPool) == 24)
-	assert.IsTrue(t, len(mp.unusedSegments) == 3)
-	segmentProxy := mp.NewSegmentProxy()
-	assert.IsNotNil(t, segmentProxy)
-	segmentProxy.WriteInt32(10)
-}

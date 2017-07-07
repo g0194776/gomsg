@@ -8,6 +8,12 @@ import (
 
 type MemorySegmentProxyer interface {
 	WriteInt32(value int32) error
+	WriteUInt32(value uint32) error
+	WriteInt64(value int64) error
+	WriteUInt64(value uint64) error
+	GetBuffer() []byte
+	WriteString(value string) error
+	WriteMemory(data []byte) error
 	//GetBuffer() ([]byte, error)
 }
 
@@ -17,15 +23,48 @@ type MemorySegmentProxy struct {
 }
 
 func (msp *MemorySegmentProxy) WriteInt32(value int32) error {
-	bytesLeft := 4
+	data := make([]byte, 4)
+	binary.LittleEndian.PutUint32(data, uint32(value))
+	return msp.WriteMemory(data)
+}
+
+func (msp *MemorySegmentProxy) WriteUInt32(value uint32) error {
+	data := make([]byte, 4)
+	binary.LittleEndian.PutUint32(data, value)
+	return msp.WriteMemory(data)
+}
+
+func (msp *MemorySegmentProxy) WriteInt64(value int64) error {
+	data := make([]byte, 8)
+	binary.LittleEndian.PutUint64(data, uint64(value))
+	return msp.WriteMemory(data)
+}
+
+func (msp *MemorySegmentProxy) WriteUInt64(value uint64) error {
+	data := make([]byte, 8)
+	binary.LittleEndian.PutUint64(data, value)
+	return msp.WriteMemory(data)
+}
+
+func (msp *MemorySegmentProxy) WriteString(value string) error {
+	if value == "" {
+		return nil
+	}
+	data := []byte(value)
+	return msp.WriteMemory(data)
+}
+
+func (msp *MemorySegmentProxy) WriteMemory(data []byte) error {
+	bytesLeft := len(data)
 	mss, nestedSegmentUsing, err := msp.getAvailableSegment(uint(bytesLeft))
 	if err != nil {
 		return err
 	}
-	data := make([]byte, 0, bytesLeft)
-	binary.LittleEndian.PutUint32(data, uint32(value))
 	if len(mss) == 1 {
 		mss[0].WriteBytes(data)
+		if !nestedSegmentUsing {
+			msp.usedSegments = append(msp.usedSegments, mss[0])
+		}
 	} else {
 		currentOffset := 0
 		for i := 0; i < len(mss); i++ {
@@ -113,6 +152,8 @@ func (msp *MemorySegmentProxy) GetBuffer() []byte {
 			//Writes used memory data.
 			buff.Write(seg.data[:seg.usedOffset])
 		}
+		//free used memory segment.
+		msp.mp.Giveback(seg)
 	}
 	return buff.Bytes()
 }
