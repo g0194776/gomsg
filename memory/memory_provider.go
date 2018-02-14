@@ -4,7 +4,8 @@ import (
 	"errors"
 	"sync"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
+	"sync/atomic"
 )
 
 var (
@@ -19,7 +20,8 @@ var (
 type MemoryProvider struct {
 	memPool []byte
 	//usedSegments []*memorySegment
-	unusedSegments []*memorySegment
+	unusedSegmentHead  *memorySegment
+	unusedSegmentCount *int32
 	sync.RWMutex
 }
 
@@ -41,18 +43,20 @@ func (mp *MemoryProvider) Initialize(memPoolSize, memSegmentSize uint) {
 	log.Infof("Initializing Memory Pool, Size: %d", mps)
 	multiples := mps / mss
 	mp.memPool = make([]byte, 0, mps)
+	var initCnt int32 = 0
+	mp.unusedSegmentCount = &initCnt
 	//mp.usedSegments = make([]*memorySegment, 0, multiples)
-	mp.unusedSegments = make([]*memorySegment, 0, multiples)
 	for index := 0; index < int(multiples); index++ {
 		//segment raw data.
 		data := mp.memPool[index*int(mss) : (index*int(mss))+int(mss)]
-		mp.unusedSegments = append(mp.unusedSegments, &memorySegment{
+		ms := &memorySegment{
 			data:          data,
 			rawDataOffset: uint(index) * mss,
 			usedOffset:    0,
 			SegmentLength: mss,
-			CurrentStatus: MEM_SEGMENT_STATUS_POOLING,
-			bytesLeft:     mss})
+			bytesLeft:     mss,
+			CurrentStatus: MEM_SEGMENT_STATUS_INIT}
+		mp.Giveback(ms)
 	}
 }
 
@@ -66,13 +70,14 @@ func (mp *MemoryProvider) NewSegmentProxy() MemorySegmentProxyer {
 func (mp *MemoryProvider) GetOneAvailable() (*memorySegment, error) {
 	mp.Lock()
 	defer mp.Unlock()
-	if len(mp.unusedSegments) == 0 {
+	if *mp.unusedSegmentCount == 0 {
 		return nil, errors.New("No more available memory segments can be use.")
 	}
-	ms := mp.unusedSegments[len(mp.unusedSegments)-1]
-	mp.unusedSegments = mp.unusedSegments[:len(mp.unusedSegments)-1]
-	//mp.usedSegments = append(mp.usedSegments, ms)
+	ms := mp.unusedSegmentHead
 	ms.CurrentStatus = MEM_SEGMENT_STATUS_BORROWED
+	mp.unusedSegmentHead = ms.Previous
+	//decrease counter.
+	atomic.AddInt32(mp.unusedSegmentCount, -1)
 	return ms, nil
 }
 
@@ -81,7 +86,7 @@ func (mp *MemoryProvider) Giveback(ms *memorySegment) error {
 	if ms == nil {
 		return errors.New("Nil Pointer being passed.")
 	}
-	if ms.CurrentStatus != MEM_SEGMENT_STATUS_BORROWED {
+	if ms.CurrentStatus != MEM_SEGMENT_STATUS_BORROWED && ms.CurrentStatus != MEM_SEGMENT_STATUS_INIT {
 		return errors.New("CANNOT give the same memory segment more than once!")
 	}
 	mp.Lock()
@@ -89,6 +94,13 @@ func (mp *MemoryProvider) Giveback(ms *memorySegment) error {
 	ms.CurrentStatus = MEM_SEGMENT_STATUS_POOLING
 	ms.usedOffset = 0
 	ms.bytesLeft = ms.SegmentLength
-	mp.unusedSegments = append(mp.unusedSegments, ms)
+	if *mp.unusedSegmentCount == 0 {
+		mp.unusedSegmentHead = ms
+	} else {
+		ms.Previous = mp.unusedSegmentHead
+		mp.unusedSegmentHead = ms
+	}
+	//increase counter.
+	atomic.AddInt32(mp.unusedSegmentCount, 1)
 	return nil
 }

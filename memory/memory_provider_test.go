@@ -3,101 +3,108 @@ package memory
 import (
 	"testing"
 
-	assert "github.com/lexandro/go-assert"
+	. "gopkg.in/check.v1"
 )
 
-func TestInitializeMemoryPool(t *testing.T) {
+type MemoryPool struct{}
+
+var _ = Suite(&MemoryPool{})
+
+func (m *MemoryPool) TestInitializeMemoryPool(c *C) {
 	mp := &MemoryProvider{}
 	mp.Initialize(0, 0) //use default value
-	assert.IsTrue(t, cap(mp.memPool) == int(defMemPoolSize))
-	assert.IsTrue(t, len(mp.unusedSegments) == int(defMemPoolSize)/int(defmemSegmentSize))
+	c.Assert(cap(mp.memPool), Equals, int(defMemPoolSize))
+	c.Assert(*mp.unusedSegmentCount, Equals, int32(int32(defMemPoolSize)/int32(defmemSegmentSize)))
 }
 
-func TestInitializeMemoryPool_WithCustomizedParameters(t *testing.T) {
+func (m *MemoryPool) TestInitializeMemoryPool_WithCustomizedParameters(c *C) {
 	mp := &MemoryProvider{}
 	mp.Initialize(1024, 128) //use default value
-	assert.IsTrue(t, cap(mp.memPool) == 1024)
-	assert.IsTrue(t, len(mp.unusedSegments) == 1024/128)
+	c.Assert(cap(mp.memPool), Equals, 1024)
+	c.Assert(*mp.unusedSegmentCount, Equals, int32(1024/128))
 }
 
-func TestInitializeMemoryPool_WithCustomizedParameters_GetAvailableSegmentSucceed(t *testing.T) {
+func (m *MemoryPool) TestInitializeMemoryPool_WithCustomizedParameters_GetAvailableSegmentSucceed(c *C) {
 	mp := &MemoryProvider{}
 	mp.Initialize(128, 64) //use default value
-	assert.IsTrue(t, cap(mp.memPool) == 128)
-	assert.IsTrue(t, len(mp.unusedSegments) == 2)
+	c.Assert(cap(mp.memPool), Equals, 128)
+	c.Assert(*mp.unusedSegmentCount, Equals, int32(2))
 
 	ms, err := mp.GetOneAvailable()
-	assert.IsNotNil(t, ms)
-	assert.IsNil(t, err)
-	assert.IsTrue(t, len(mp.unusedSegments) == 1)
+	c.Assert(ms, NotNil)
+	c.Assert(err, IsNil)
+	c.Assert(*mp.unusedSegmentCount, Equals, int32(1))
 	//assert.IsTrue(t, len(mp.usedSegments) == 1)
 }
 
-func TestInitializeMemoryPool_WithCustomizedParameters_GetAllAvailableSegmentsSucceed(t *testing.T) {
+func (m *MemoryPool) TestInitializeMemoryPool_WithCustomizedParameters_GetAllAvailableSegmentsSucceed(c *C) {
 	mp := &MemoryProvider{}
 	mp.Initialize(128, 64) //use default value
-	assert.IsTrue(t, cap(mp.memPool) == 128)
-	assert.IsTrue(t, len(mp.unusedSegments) == 2)
+	c.Assert(cap(mp.memPool), Equals, 128)
+	c.Assert(*mp.unusedSegmentCount, Equals, int32(2))
 
 	ms, err := mp.GetOneAvailable()
-	assert.IsNotNil(t, ms)
-	assert.IsNil(t, err)
-	assert.IsTrue(t, len(mp.unusedSegments) == 1)
+	c.Assert(ms, NotNil)
+	c.Assert(err, Equals, nil)
+	c.Assert(*mp.unusedSegmentCount, Equals, int32(1))
 	//assert.IsTrue(t, len(mp.usedSegments) == 1)
 
 	//Execute Gets method again.
 	ms, err = mp.GetOneAvailable()
-	assert.IsNotNil(t, ms)
-	assert.IsNil(t, err)
+	c.Assert(ms, NotNil)
+	c.Assert(err, Equals, nil)
 
 	//No more available memory segments.
 	ms, err = mp.GetOneAvailable()
-	assert.IsTrue(t, ms == nil)
-	assert.IsNotNil(t, err)
+	c.Assert(ms, IsNil)
+	c.Assert(err, NotNil)
 }
 
-func TestInitializeMemoryPool_WithCustomizedParameters_GivebackTwice(t *testing.T) {
+// Hook up gocheck into the "go test" runner.
+func Test(t *testing.T) { TestingT(t) }
+
+func (m *MemoryPool) TestInitializeMemoryPool_WithCustomizedParameters_GivebackTwice(c *C) {
 	mp := &MemoryProvider{}
 	mp.Initialize(128, 64) //use default value
-	assert.IsTrue(t, cap(mp.memPool) == 128)
-	assert.IsTrue(t, len(mp.unusedSegments) == 2)
+	c.Assert(cap(mp.memPool), Equals, 128)
+	c.Assert(*mp.unusedSegmentCount, Equals, int32(2))
 
 	ms, err := mp.GetOneAvailable()
-	assert.IsNotNil(t, ms)
-	assert.IsNil(t, err)
-	assert.IsTrue(t, len(mp.unusedSegments) == 1)
+	c.Assert(ms, NotNil)
+	c.Assert(err, IsNil)
+	c.Assert(*mp.unusedSegmentCount, Equals, int32(1))
 	//assert.IsTrue(t, len(mp.usedSegments) == 1)
 
 	//Execute Gets method again.
 	ms2, err := mp.GetOneAvailable()
-	assert.IsNotNil(t, ms2)
-	assert.IsNil(t, err)
+	c.Assert(ms2, NotNil)
+	c.Assert(err, IsNil)
 
 	//No more available memory segments.
 	ms3, err := mp.GetOneAvailable()
-	assert.IsTrue(t, ms3 == nil)
-	assert.IsNotNil(t, err)
-	assert.IsTrue(t, len(mp.unusedSegments) == 0)
+	c.Assert(ms3, IsNil)
+	c.Assert(err, NotNil)
+	c.Assert(*mp.unusedSegmentCount, Equals, int32(0))
 
-	assert.IsNil(t, mp.Giveback(ms))
-	assert.IsTrue(t, len(mp.unusedSegments) == 1)
+	c.Assert(mp.Giveback(ms), IsNil)
+	c.Assert(*mp.unusedSegmentCount, Equals, int32(1))
 	//Giveback the same memory segment more than once.
-	assert.IsNotNil(t, mp.Giveback(ms))
-	assert.IsNil(t, mp.Giveback(ms2))
-	assert.IsTrue(t, len(mp.unusedSegments) == 2)
+	c.Assert(mp.Giveback(ms), NotNil)
+	c.Assert(mp.Giveback(ms2), IsNil)
+	c.Assert(*mp.unusedSegmentCount, Equals, int32(2))
 }
 
-func TestInitializeMemoryPool_WithCustomizedParameters_GivebackNilPointer(t *testing.T) {
+func (m *MemoryPool) TestInitializeMemoryPool_WithCustomizedParameters_GivebackNilPointer(c *C) {
 	mp := &MemoryProvider{}
 	mp.Initialize(128, 64) //use default value
-	assert.IsTrue(t, cap(mp.memPool) == 128)
-	assert.IsTrue(t, len(mp.unusedSegments) == 2)
+	c.Assert(cap(mp.memPool), Equals, 128)
+	c.Assert(*mp.unusedSegmentCount, Equals, int32(2))
 
 	ms, err := mp.GetOneAvailable()
-	assert.IsNotNil(t, ms)
-	assert.IsNil(t, err)
-	assert.IsTrue(t, len(mp.unusedSegments) == 1)
+	c.Assert(ms, NotNil)
+	c.Assert(err, IsNil)
+	c.Assert(*mp.unusedSegmentCount, Equals, int32(1))
 	//assert.IsTrue(t, len(mp.usedSegments) == 1)
 
-	assert.IsNotNil(t, mp.Giveback(nil))
+	c.Assert(mp.Giveback(nil), NotNil)
 }
